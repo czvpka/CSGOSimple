@@ -1,24 +1,27 @@
-
-#include "Visuals.hpp"
+#include "visuals.hpp"
+#include <stdio.h>
 
 #include "../options.hpp"
 #include "../valve_sdk/csgostructs.hpp"
-#include "../helpers/Math.hpp"
-#include "../helpers/Utils.hpp"
+#include "../helpers/math.hpp"
+#include "../helpers/utils.hpp"
 
 vgui::HFont esp_font;
 vgui::HFont defuse_font;
 vgui::HFont dropped_weapons_font;
 
+// ESP Context
+// This is used so that we dont have to calculate player color and position
+// on each individual function over and over
 struct
 {
     C_BasePlayer* pl;
-    bool    is_enemy;
-	bool    is_visible;
-    Color   clr;
-    Vector  head;
-    Vector  feet;
-    RECT    bbox;
+    bool          is_enemy;
+    bool          is_visible;
+    Color         clr;
+    Vector        head_pos;
+    Vector        feet_pos;
+    RECT          bbox;
 } esp_ctx;
 
 RECT GetBBox(C_BaseEntity* ent)
@@ -75,14 +78,33 @@ RECT GetBBox(C_BaseEntity* ent)
     }
     return RECT{ (long)left, (long)top, (long)right, (long)bottom };
 }
+
+void DrawBone(int startBone, int endBone, C_BasePlayer* entity, Color color) {
+	Vector startBonePos, endBonePos, startDrawPos, endDrawPos;
+
+	if (!entity)
+		return;
+
+	startBonePos = entity->GetBonePos(startBone);
+	endBonePos = entity->GetBonePos(endBone);
+
+	if (!Math::WorldToScreen(startBonePos, startDrawPos))
+		return;
+
+	if (!Math::WorldToScreen(endBonePos, endDrawPos))
+		return;
+
+	g_VGuiSurface->DrawSetColor(color);
+	g_VGuiSurface->DrawLine(startDrawPos.x, startDrawPos.y, endDrawPos.x, endDrawPos.y);
+}
 //--------------------------------------------------------------------------------
 bool Visuals::CreateFonts()
 {
-    esp_font             = g_VGuiSurface->CreateFont_();
-    defuse_font          = g_VGuiSurface->CreateFont_();
+    esp_font = g_VGuiSurface->CreateFont_();
+    defuse_font = g_VGuiSurface->CreateFont_();
     dropped_weapons_font = g_VGuiSurface->CreateFont_();
 
-    g_VGuiSurface->SetFontGlyphSet(esp_font, "Arial", 11, 700, 0, 0, FONTFLAG_DROPSHADOW);
+    g_VGuiSurface->SetFontGlyphSet(esp_font, "Arial", 11, 700, 0, 0, FONTFLAG_OUTLINE);
     g_VGuiSurface->SetFontGlyphSet(defuse_font, "Arial", 15, 700, 0, 0, FONTFLAG_DROPSHADOW);
     g_VGuiSurface->SetFontGlyphSet(dropped_weapons_font, "Arial", 10, 700, 0, 0, FONTFLAG_DROPSHADOW);
 
@@ -92,41 +114,41 @@ bool Visuals::CreateFonts()
 void Visuals::DestroyFonts()
 {
     // Is there a way to destroy vgui fonts?
-    // TODO: GetOffset out
+    // TODO: Find out
 }
 //--------------------------------------------------------------------------------
-bool Visuals::player::begin(C_BasePlayer* pl)
+bool Visuals::Player::Begin(C_BasePlayer* pl)
 {
     esp_ctx.pl = pl;
     esp_ctx.is_enemy = g_LocalPlayer->m_iTeamNum() != pl->m_iTeamNum();
-	esp_ctx.is_visible = g_LocalPlayer->CanSeePlayer(pl, HITBOX_CHEST);
+    esp_ctx.is_visible = g_LocalPlayer->CanSeePlayer(pl, HITBOX_CHEST);
 
     if(!esp_ctx.is_enemy && g_Options.esp_enemies_only)
         return false;
 
-	esp_ctx.clr = esp_ctx.is_enemy ? (esp_ctx.is_visible ? g_Options.color_esp_enemy_visible : g_Options.color_esp_enemy_occluded): (esp_ctx.is_visible ? g_Options.color_esp_ally_visible : g_Options.color_esp_ally_occluded);
+    esp_ctx.clr = esp_ctx.is_enemy ? (esp_ctx.is_visible ? g_Options.color_esp_enemy_visible : g_Options.color_esp_enemy_occluded) : (esp_ctx.is_visible ? g_Options.color_esp_ally_visible : g_Options.color_esp_ally_occluded);
 
-    auto  head   = pl->GetHitboxPos(HITBOX_HEAD);
-    auto& origin = pl->m_vecOrigin();
+    auto head = pl->GetHitboxPos(HITBOX_HEAD);
+    auto origin = pl->m_vecOrigin();
 
     head.z += 15;
 
-    if(!Math::WorldToScreen(head, esp_ctx.head) ||
-       !Math::WorldToScreen(origin, esp_ctx.feet))
+    if(!Math::WorldToScreen(head, esp_ctx.head_pos) ||
+       !Math::WorldToScreen(origin, esp_ctx.feet_pos))
         return false;
 
-    auto h = fabs(esp_ctx.head.y - esp_ctx.feet.y);
+    auto h = fabs(esp_ctx.head_pos.y - esp_ctx.feet_pos.y);
     auto w = h / 1.65f;
 
-    esp_ctx.bbox.left   = static_cast<long>(esp_ctx.feet.x - w * 0.5f);
-    esp_ctx.bbox.right  = static_cast<long>(esp_ctx.bbox.left + w);
-    esp_ctx.bbox.bottom = static_cast<long>(esp_ctx.feet.y);
-    esp_ctx.bbox.top    = static_cast<long>(esp_ctx.head.y);
+    esp_ctx.bbox.left = static_cast<long>(esp_ctx.feet_pos.x - w * 0.5f);
+    esp_ctx.bbox.right = static_cast<long>(esp_ctx.bbox.left + w);
+    esp_ctx.bbox.bottom = static_cast<long>(esp_ctx.feet_pos.y);
+    esp_ctx.bbox.top = static_cast<long>(esp_ctx.head_pos.y);
 
     return true;
 }
 //--------------------------------------------------------------------------------
-void Visuals::player::RenderBox()
+void Visuals::Player::RenderBox()
 {
     g_VGuiSurface->DrawSetColor(esp_ctx.clr);
     g_VGuiSurface->DrawOutlinedRect(esp_ctx.bbox.left, esp_ctx.bbox.top, esp_ctx.bbox.right, esp_ctx.bbox.bottom);
@@ -135,7 +157,7 @@ void Visuals::player::RenderBox()
     g_VGuiSurface->DrawOutlinedRect(esp_ctx.bbox.left + 1, esp_ctx.bbox.top + 1, esp_ctx.bbox.right - 1, esp_ctx.bbox.bottom - 1);
 }
 //--------------------------------------------------------------------------------
-void Visuals::player::RenderName()
+void Visuals::Player::RenderName()
 {
     wchar_t buf[128];
 
@@ -147,12 +169,12 @@ void Visuals::player::RenderName()
 
         g_VGuiSurface->DrawSetTextFont(esp_font);
         g_VGuiSurface->DrawSetTextColor(esp_ctx.clr);
-        g_VGuiSurface->DrawSetTextPos(esp_ctx.feet.x - tw / 2, esp_ctx.head.y - th);
+        g_VGuiSurface->DrawSetTextPos(esp_ctx.feet_pos.x - tw / 2, esp_ctx.head_pos.y - th);
         g_VGuiSurface->DrawPrintText(buf, wcslen(buf));
     }
 }
 //--------------------------------------------------------------------------------
-void Visuals::player::RenderHealth()
+void Visuals::Player::RenderHealth()
 {
     auto  hp = esp_ctx.pl->m_iHealth();
     float box_h = (float)fabs(esp_ctx.bbox.bottom - esp_ctx.bbox.top);
@@ -161,7 +183,7 @@ void Visuals::player::RenderHealth()
 
     auto height = (((box_h * hp) / 100));
 
-    int red   = int(255 - (hp * 2.55f));
+    int red = int(255 - (hp * 2.55f));
     int green = int(hp * 2.55f);
 
     int x = esp_ctx.bbox.left - off;
@@ -173,10 +195,31 @@ void Visuals::player::RenderHealth()
     g_VGuiSurface->DrawFilledRect(x, y, x + w, y + h);
 
     g_VGuiSurface->DrawSetColor(Color(red, green, 0, 255));
-    g_VGuiSurface->DrawFilledRect(x+1, y + 1, x + w - 1, y + height - 2);
+    g_VGuiSurface->DrawFilledRect(x + 1, y + 1, x + w - 1, y + height - 2);
 }
 //--------------------------------------------------------------------------------
-void Visuals::player::RenderWeapon()
+void Visuals::Player::RenderArmour()
+{
+    auto  armour = esp_ctx.pl->m_ArmorValue();
+    float box_h = (float)fabs(esp_ctx.bbox.bottom - esp_ctx.bbox.top);
+    //float off = (box_h / 6.f) + 5;
+    float off = 4;
+
+    auto height = (((box_h * armour) / 100));
+
+    int x = esp_ctx.bbox.right + off;
+    int y = esp_ctx.bbox.top;
+    int w = 4;
+    int h = box_h;
+
+    g_VGuiSurface->DrawSetColor(Color::Black);
+    g_VGuiSurface->DrawFilledRect(x, y, x + w, y + h);
+
+    g_VGuiSurface->DrawSetColor(Color(0, 50, 255, 255));
+    g_VGuiSurface->DrawFilledRect(x + 1, y + 1, x + w - 1, y + height - 2);
+}
+//--------------------------------------------------------------------------------
+void Visuals::Player::RenderWeapon()
 {
     wchar_t buf[80];
 
@@ -190,12 +233,12 @@ void Visuals::player::RenderWeapon()
 
         g_VGuiSurface->DrawSetTextFont(esp_font);
         g_VGuiSurface->DrawSetTextColor(esp_ctx.clr);
-        g_VGuiSurface->DrawSetTextPos(esp_ctx.feet.x - tw / 2, esp_ctx.feet.y);
+        g_VGuiSurface->DrawSetTextPos(esp_ctx.feet_pos.x - tw / 2, esp_ctx.feet_pos.y);
         g_VGuiSurface->DrawPrintText(buf, wcslen(buf));
     }
 }
 //--------------------------------------------------------------------------------
-void Visuals::player::RenderSnapline()
+void Visuals::Player::RenderSnapline()
 {
     int screen_w, screen_h;
     g_EngineClient->GetScreenSize(screen_w, screen_h);
@@ -205,8 +248,37 @@ void Visuals::player::RenderSnapline()
     g_VGuiSurface->DrawLine(
         screen_w / 2,
         screen_h,
-        esp_ctx.feet.x,
-        esp_ctx.feet.y);
+        esp_ctx.feet_pos.x,
+        esp_ctx.feet_pos.y);
+}
+//--------------------------------------------------------------------------------
+void Visuals::Player::RenderBones()
+{
+	DrawBone(7, 6, esp_ctx.pl, Color::White); //neck to chest
+
+	DrawBone(6, 0, esp_ctx.pl, Color::White); //chest to bone 0
+
+	DrawBone(6, 38, esp_ctx.pl, Color::White); //left arm
+	DrawBone(38, 39, esp_ctx.pl, Color::White); //left arm to forearm
+	DrawBone(39, 62, esp_ctx.pl, Color::White); //left forearm
+	DrawBone(62, 40, esp_ctx.pl, Color::White); //left hand
+
+	DrawBone(0, 72, esp_ctx.pl, Color::White); //bone 0 to left tight
+	DrawBone(72, 77, esp_ctx.pl, Color::White); //left tight
+	DrawBone(77, 78, esp_ctx.pl, Color::White); //left tight to knee
+	DrawBone(78, 73, esp_ctx.pl, Color::White); //left knee
+	DrawBone(73, 74, esp_ctx.pl, Color::White); //left shank
+
+	DrawBone(6, 10, esp_ctx.pl, Color::White); //right arm
+	DrawBone(10, 11, esp_ctx.pl, Color::White); //right arm to forearm
+	DrawBone(11, 34, esp_ctx.pl, Color::White); //right forearm
+	DrawBone(34, 17, esp_ctx.pl, Color::White); //right hand
+
+	DrawBone(0, 65, esp_ctx.pl, Color::White); //bone 0 to right tight
+	DrawBone(65, 70, esp_ctx.pl, Color::White); //right tight
+	DrawBone(70, 71, esp_ctx.pl, Color::White); //right tight to knee
+	DrawBone(71, 66, esp_ctx.pl, Color::White); //right knee
+	DrawBone(66, 67, esp_ctx.pl, Color::White); //right shank
 }
 //--------------------------------------------------------------------------------
 void Visuals::Misc::RenderCrosshair()
@@ -214,7 +286,7 @@ void Visuals::Misc::RenderCrosshair()
     int w, h;
 
     g_EngineClient->GetScreenSize(w, h);
-    
+
     g_VGuiSurface->DrawSetColor(g_Options.color_esp_crosshair);
 
     int cx = w / 2;
@@ -227,8 +299,7 @@ void Visuals::Misc::RenderCrosshair()
 void Visuals::Misc::RenderWeapon(C_BaseCombatWeapon* ent)
 {
     wchar_t buf[80];
-    auto clean_item_name = [](const char* name) -> const char*
-    {
+    auto clean_item_name = [](const char* name) -> const char* {
         if(name[0] == 'C')
             name++;
 
@@ -247,15 +318,15 @@ void Visuals::Misc::RenderWeapon(C_BaseCombatWeapon* ent)
 
     if(bbox.right == 0 || bbox.bottom == 0)
         return;
-    
+
     g_VGuiSurface->DrawSetColor(g_Options.color_esp_weapons);
     g_VGuiSurface->DrawLine(bbox.left, bbox.top, bbox.right, bbox.top);
     g_VGuiSurface->DrawLine(bbox.left, bbox.bottom, bbox.right, bbox.bottom);
     g_VGuiSurface->DrawLine(bbox.left, bbox.top, bbox.left, bbox.bottom);
     g_VGuiSurface->DrawLine(bbox.right, bbox.top, bbox.right, bbox.bottom);
-    
+
     auto name = clean_item_name(ent->GetClientClass()->m_pNetworkName);
-    
+
     if(MultiByteToWideChar(CP_UTF8, 0, name, -1, buf, 80) > 0) {
         int w = bbox.right - bbox.left;
         int tw, th;
