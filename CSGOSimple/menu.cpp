@@ -4,12 +4,13 @@
 #include <chrono>
 
 #include "valve_sdk/csgostructs.hpp"
-#include "helpers/InputSys.hpp"
+#include "helpers/input.hpp"
+#include "options.hpp"
+
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui/imgui_internal.h"
 #include "imgui/directx9/imgui_impl_dx9.h"
 
-#include "Options.hpp"
 
 // =========================================================
 // 
@@ -25,18 +26,18 @@ static char* sidebar_tabs[] = {
 
 static ConVar* cl_mouseenable = nullptr;
 
-constexpr static float get_sidebar_item_width()  { return 150.0f; }
+constexpr static float get_sidebar_item_width() { return 150.0f; }
 constexpr static float get_sidebar_item_height() { return  50.0f; }
 
 namespace ImGuiEx
 {
     inline bool ColorEdit4(const char* label, Color* v, bool show_alpha = true)
     {
-        auto clr = ImVec4{ 
+        auto clr = ImVec4{
             v->r() / 255.0f,
             v->g() / 255.0f,
             v->b() / 255.0f,
-            v->a() / 255.0f 
+            v->a() / 255.0f
         };
 
         if(ImGui::ColorEdit4(label, &clr.x, show_alpha)) {
@@ -113,7 +114,7 @@ void RenderEspTab()
     {
         if(active_esp_tab == 0) {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ style.WindowPadding.x, style.ItemSpacing.y });
-            ImGui::Columns(3, NULL, false);
+            ImGui::Columns(3, nullptr, false);
             ImGui::SetColumnOffset(1, group_w / 3.0f);
             ImGui::SetColumnOffset(2, 2 * group_w / 3.0f);
             ImGui::SetColumnOffset(3, group_w);
@@ -123,6 +124,8 @@ void RenderEspTab()
             ImGui::Checkbox("Boxes", &g_Options.esp_player_boxes);
             ImGui::Checkbox("Names", &g_Options.esp_player_names);
             ImGui::Checkbox("Health", &g_Options.esp_player_health);
+            ImGui::Checkbox("Armour", &g_Options.esp_player_armour);
+			ImGui::Checkbox("Skeleton", &g_Options.esp_player_skeleton);
             ImGui::Checkbox("Weapon", &g_Options.esp_player_weapons);
             ImGui::Checkbox("Snaplines", &g_Options.esp_player_snaplines);
 
@@ -138,20 +141,20 @@ void RenderEspTab()
             ImGui::PushItemWidth(100);
             ImGui::ColorEditMode(ImGuiColorEditMode_HEX);
             ImGuiEx::ColorEdit3("Allies Visible", &g_Options.color_esp_ally_visible);
-			ImGuiEx::ColorEdit3("Enemies Visible", &g_Options.color_esp_enemy_visible);
-			ImGuiEx::ColorEdit3("Allies Occluded", &g_Options.color_esp_ally_occluded);
-			ImGuiEx::ColorEdit3("Enemies Occluded", &g_Options.color_esp_enemy_occluded);
+            ImGuiEx::ColorEdit3("Enemies Visible", &g_Options.color_esp_enemy_visible);
+            ImGuiEx::ColorEdit3("Allies Occluded", &g_Options.color_esp_ally_occluded);
+            ImGuiEx::ColorEdit3("Enemies Occluded", &g_Options.color_esp_enemy_occluded);
             ImGuiEx::ColorEdit3("Crosshair", &g_Options.color_esp_crosshair);
             ImGuiEx::ColorEdit3("Dropped Weapons", &g_Options.color_esp_weapons);
             ImGuiEx::ColorEdit3("Defuse Kit", &g_Options.color_esp_defuse);
             ImGuiEx::ColorEdit3("Planted C4", &g_Options.color_esp_c4);
             ImGui::PopItemWidth();
 
-            ImGui::Columns(1, NULL, false);
+            ImGui::Columns(1, nullptr, false);
             ImGui::PopStyleVar();
         } else if(active_esp_tab == 1) {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ style.WindowPadding.x, style.ItemSpacing.y });
-            ImGui::Columns(3, NULL, false);
+            ImGui::Columns(3, nullptr, false);
             ImGui::SetColumnOffset(1, group_w / 3.0f);
             ImGui::SetColumnOffset(2, 2 * group_w / 3.0f);
             ImGui::SetColumnOffset(3, group_w);
@@ -180,13 +183,13 @@ void RenderEspTab()
 
             ImGui::NextColumn();
 
-            ImGui::Columns(1, NULL, false);
+            ImGui::Columns(1, nullptr, false);
             ImGui::PopStyleVar();
         } else if(active_esp_tab == 2) {
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ style.WindowPadding.x, style.ItemSpacing.y });
-            ImGui::Columns(3, NULL, false);
+            ImGui::Columns(3, nullptr, false);
             ImGui::SetColumnOffset(1, group_w / 3.0f);
-            ImGui::SetColumnOffset(2, 2 * group_w / 3.0f);
+            ImGui::SetColumnOffset(2, 2 * group_w / 2.9f);
             ImGui::SetColumnOffset(3, group_w);
 
             ImGui::BeginGroupBox("Players");
@@ -195,7 +198,8 @@ void RenderEspTab()
                 ImGui::Checkbox("Team Check", &g_Options.chams_player_enemies_only);
                 ImGui::Checkbox("Wireframe", &g_Options.chams_player_wireframe);
                 ImGui::Checkbox("Flat", &g_Options.chams_player_flat);
-                ImGui::Checkbox("Ignore-Z", &g_Options.chams_player_ignorez);
+                ImGui::Checkbox("Ignore-Z", &g_Options.chams_player_ignorez); ImGui::SameLine();
+                ImGui::Checkbox("Glass", &g_Options.chams_player_glass);
                 ImGui::ColorEditMode(ImGuiColorEditMode_HEX);
                 ImGui::PushItemWidth(110);
                 ImGuiEx::ColorEdit4("Ally (Visible)", &g_Options.color_chams_player_ally_visible);
@@ -214,6 +218,7 @@ void RenderEspTab()
                 ImGui::Checkbox("Wireframe", &g_Options.chams_arms_wireframe);
                 ImGui::Checkbox("Flat", &g_Options.chams_arms_flat);
                 ImGui::Checkbox("Ignore-Z", &g_Options.chams_arms_ignorez);
+                ImGui::Checkbox("Glass", &g_Options.chams_arms_glass);
                 ImGui::ColorEditMode(ImGuiColorEditMode_HEX);
                 ImGui::PushItemWidth(110);
                 ImGuiEx::ColorEdit4("Color (Visible)", &g_Options.color_chams_arms_visible);
@@ -222,7 +227,7 @@ void RenderEspTab()
             }
             ImGui::EndGroupBox();
 
-            ImGui::Columns(1, NULL, false);
+            ImGui::Columns(1, nullptr, false);
             ImGui::PopStyleVar();
         }
     }
@@ -243,7 +248,7 @@ void RenderMiscTab()
     ImGui::BeginGroupBox("##body_content");
     {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{ style.WindowPadding.x, style.ItemSpacing.y });
-        ImGui::Columns(3, NULL, false);
+        ImGui::Columns(3, nullptr, false);
         ImGui::SetColumnOffset(1, group_w / 3.0f);
         ImGui::SetColumnOffset(2, 2 * group_w / 3.0f);
         ImGui::SetColumnOffset(3, group_w);
@@ -257,7 +262,7 @@ void RenderMiscTab()
         ImGui::SliderFloat("mat_ambient_light_b:", &g_Options.mat_ambient_light_b, 0, 1);
         ImGui::PopItemWidth();
 
-        ImGui::Columns(1, NULL, false);
+        ImGui::Columns(1, nullptr, false);
         ImGui::PopStyleVar();
     }
     ImGui::EndGroupBox();
@@ -317,12 +322,12 @@ void Menu::OnDeviceReset()
 
 void Menu::Render()
 {
+    if(!_visible)
+        return;
+
     ImGui_ImplDX9_NewFrame();
 
     ImGui::GetIO().MouseDrawCursor = _visible;
-
-    if(!_visible)
-        return;
 
     const auto sidebar_size = get_sidebar_size();
     static int active_sidebar_tab = 0;
@@ -332,12 +337,11 @@ void Menu::Render()
     ImGui::SetNextWindowPos(ImVec2{ 0, 0 }, ImGuiSetCond_Once);
     ImGui::SetNextWindowSize(ImVec2{ 1000, 0 }, ImGuiSetCond_Once);
 
-    if(ImGui::Begin("CSGOSimple", 
-                    &_visible, 
-                    ImGuiWindowFlags_NoCollapse | 
+    if(ImGui::Begin("CSGOSimple",
+                    &_visible,
+                    ImGuiWindowFlags_NoCollapse |
                     ImGuiWindowFlags_ShowBorders |
-                    ImGuiWindowFlags_NoResize))
-    {
+                    ImGuiWindowFlags_NoResize)) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2::Zero);
         {
             ImGui::BeginGroupBox("##sidebar", sidebar_size);
