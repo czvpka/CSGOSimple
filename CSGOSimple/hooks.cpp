@@ -4,7 +4,6 @@
 #include "options.hpp"
 #include "helpers/input.hpp"
 #include "helpers/utils.hpp"
-#include "features/aimbot.hpp"
 #include "features/bhop.hpp"
 #include "features/chams.hpp"
 #include "features/visuals.hpp"
@@ -116,8 +115,6 @@ namespace Hooks
         if(g_Options.misc_bhop) {
             BunnyHop::OnCreateMove(cmd);
         }
-
-		Aimbot::OnCreateMove(cmd);
 
         verified->m_cmd = *cmd;
         verified->m_crc = cmd->GetChecksum();

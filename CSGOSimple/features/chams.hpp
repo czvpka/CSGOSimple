@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Singleton.hpp"
+#include "../singleton.hpp"
 
 class IMatRenderContext;
 struct DrawModelState_t;
@@ -25,10 +25,10 @@ public:
         matrix3x4_t *pCustomBoneToWorld);
 
 private:
-    void OverrideMaterial(bool ignoreZ, bool flat, bool wireframe, const Color& rgba);
+    void OverrideMaterial(bool ignoreZ, bool flat, bool wireframe, bool glass, const Color& rgba);
 
-    IMaterial* materialRegular          = nullptr;
-    IMaterial* materialRegularIgnoreZ   = nullptr;
-    IMaterial* materialFlatIgnoreZ      = nullptr;
-    IMaterial* materialFlat             = nullptr;
+    IMaterial* materialRegular = nullptr;
+    IMaterial* materialRegularIgnoreZ = nullptr;
+    IMaterial* materialFlatIgnoreZ = nullptr;
+    IMaterial* materialFlat = nullptr;
 };

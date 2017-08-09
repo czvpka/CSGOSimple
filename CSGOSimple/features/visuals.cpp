@@ -1,6 +1,4 @@
 #include "visuals.hpp"
-#include <stdio.h>
-
 #include "../options.hpp"
 #include "../valve_sdk/csgostructs.hpp"
 #include "../helpers/math.hpp"

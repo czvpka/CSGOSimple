@@ -1,8 +1,5 @@
 #pragma once
 
-#include "../valve_sdk/Math/Vector.hpp"
-#include "../valve_sdk/Interfaces/IVEngineClient.hpp"
-
 class C_BasePlayer;
 class C_BaseEntity;
 class C_BaseCombatWeapon;
@@ -12,19 +9,14 @@ class ClientClass;
 
 namespace Visuals
 {
-
-    struct ESPBox
+    namespace Player
     {
-        int x, y, w, h, gay;
-    };
-
-    namespace player
-    {
-        bool begin(C_BasePlayer* pl);
+        bool Begin(C_BasePlayer* pl);
 
         void RenderBox();
         void RenderName();
         void RenderHealth();
+        void RenderArmour();
         void RenderWeapon();
         void RenderSnapline();
     }
