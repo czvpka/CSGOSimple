@@ -1,12 +1,14 @@
-#include "Hooks.hpp"
+#include "hooks.hpp"
 
-#include "Menu.hpp"
-#include "Options.hpp"
-#include "helpers/InputSys.hpp"
-#include "helpers/Utils.hpp"
+#include "menu.hpp"
+#include "options.hpp"
+#include "helpers/input.hpp"
+#include "helpers/utils.hpp"
+#include "features/aimbot.hpp"
 #include "features/bhop.hpp"
-#include "features/Chams.hpp"
-#include "features/Visuals.hpp"
+#include "features/chams.hpp"
+#include "features/visuals.hpp"
+#include "features/glow.hpp"
 
 namespace Hooks
 {
@@ -15,8 +17,8 @@ namespace Hooks
     vfunc_hook vguipanel_hook;
     vfunc_hook vguisurf_hook;
     vfunc_hook mdlrender_hook;
-    vfunc_hook viewrender_hook;
-
+    vfunc_hook clientmode_hook;
+    
     void Initialize()
     {
         hlclient_hook .setup(g_CHLClient);
@@ -24,7 +26,7 @@ namespace Hooks
         vguipanel_hook.setup(g_VGuiPanel);
         vguisurf_hook .setup(g_VGuiSurface);
         mdlrender_hook.setup(g_MdlRender);
-        viewrender_hook.setup(g_ViewRender);
+        clientmode_hook.setup(g_ClientMode);
 
         direct3d_hook.hook_index(index::EndScene, hkEndScene);
         direct3d_hook.hook_index(index::Reset, hkReset);
@@ -38,7 +40,7 @@ namespace Hooks
 
         mdlrender_hook.hook_index(index::DrawModelExecute, hkDrawModelExecute);
 
-        viewrender_hook.hook_index(index::RenderView, hkRenderView);
+        clientmode_hook.hook_index(index::DoPostScreenSpaceEffects, hkDoPostScreenEffects);
 
         Visuals::CreateFonts();
     }
@@ -50,6 +52,10 @@ namespace Hooks
         vguipanel_hook.unhook_all();
         vguisurf_hook.unhook_all();
         mdlrender_hook.unhook_all();
+        clientmode_hook.unhook_all();
+
+        Glow::Get().Shutdown();
+
         Visuals::DestroyFonts();
     }
     //--------------------------------------------------------------------------------
@@ -60,15 +66,15 @@ namespace Hooks
         static auto viewmodel_fov       = g_CVar->FindVar("viewmodel_fov");
         static auto mat_ambient_light_r = g_CVar->FindVar("mat_ambient_light_r");
         static auto mat_ambient_light_g = g_CVar->FindVar("mat_ambient_light_g");
-		static auto mat_ambient_light_b = g_CVar->FindVar("mat_ambient_light_b");
-		static auto crosshair_cvar = g_CVar->FindVar("crosshair");
+        static auto mat_ambient_light_b = g_CVar->FindVar("mat_ambient_light_b");
+        static auto crosshair_cvar      = g_CVar->FindVar("crosshair");
 
         viewmodel_fov->m_fnChangeCallbacks.m_Size = 0;
         viewmodel_fov->SetValue(g_Options.viewmodel_fov);
         mat_ambient_light_r->SetValue(g_Options.mat_ambient_light_r);
         mat_ambient_light_g->SetValue(g_Options.mat_ambient_light_g);
         mat_ambient_light_b->SetValue(g_Options.mat_ambient_light_b);
-		crosshair_cvar->SetValue(g_Options.esp_crosshair ? 0 : 1);
+        crosshair_cvar->SetValue(!g_Options.esp_crosshair);
 
         Menu::Get().Render();
 
@@ -111,6 +117,8 @@ namespace Hooks
             BunnyHop::OnCreateMove(cmd);
         }
 
+		Aimbot::OnCreateMove(cmd);
+
         verified->m_cmd = *cmd;
         verified->m_crc = cmd->GetChecksum();
     }
@@ -152,31 +160,37 @@ namespace Hooks
                 if(!g_LocalPlayer)
                     return;
 
-                for(auto i = 1; i <= g_EntityList->GetMaxEntities(); ++i) {
-                    auto entity = (C_BaseEntity*)C_BaseEntity::GetEntityByIndex(i);
+                if(g_Options.esp_enabled) {
+                    for(auto i = 1; i <= g_EntityList->GetHighestEntityIndex(); ++i) {
+                        auto entity = C_BasePlayer::GetPlayerByIndex(i);
 
-                    if(!entity)
-                        continue;
+                        if(!entity)
+                            continue;
 
-                    if(entity == g_LocalPlayer)
-                        continue;
+                        if(entity == g_LocalPlayer)
+                            continue;
 
-                    if(i < 65 && g_Options.esp_enabled) {
-                        auto player = (C_BasePlayer*)entity;
-                        if(!entity->IsDormant() && player->IsAlive() && Visuals::player::begin(player)) {
-                            if(g_Options.esp_player_snaplines) Visuals::player::RenderSnapline();
-                            if(g_Options.esp_player_boxes)     Visuals::player::RenderBox();
-                            if(g_Options.esp_player_weapons)   Visuals::player::RenderWeapon();
-                            if(g_Options.esp_player_names)     Visuals::player::RenderName();
-                            if(g_Options.esp_player_health)    Visuals::player::RenderHealth();
+                        if(i < 65 && !entity->IsDormant() && entity->IsAlive()) {
+                            // Begin will calculate player screen coordinate, bounding box, etc
+                            // If it returns false it means the player is not inside the screen
+                            // or is an ally (and team check is enabled)
+                            if(Visuals::Player::Begin(entity)) {
+                                if(g_Options.esp_player_snaplines) Visuals::Player::RenderSnapline();
+                                if(g_Options.esp_player_boxes)     Visuals::Player::RenderBox();
+                                if(g_Options.esp_player_weapons)   Visuals::Player::RenderWeapon();
+                                if(g_Options.esp_player_names)     Visuals::Player::RenderName();
+                                if(g_Options.esp_player_health)    Visuals::Player::RenderHealth();
+                                if(g_Options.esp_player_armour)    Visuals::Player::RenderArmour();
+								if(g_Options.esp_player_skeleton)  Visuals::Player::RenderBones();
+                            }
+                        } else if(g_Options.esp_dropped_weapons && entity->IsWeapon()) {
+                            Visuals::Misc::RenderWeapon((C_BaseCombatWeapon*)entity);
+                        } else if(g_Options.esp_defuse_kit && entity->IsDefuseKit()) {
+                            Visuals::Misc::RenderDefuseKit(entity);
+                        } else if(entity->IsPlantedC4()) {
+                            if(g_Options.esp_planted_c4)
+                                Visuals::Misc::RenderPlantedC4(entity);
                         }
-                    } else if(g_Options.esp_dropped_weapons && entity->IsWeapon()) {
-                        Visuals::Misc::RenderWeapon((C_BaseCombatWeapon*)entity);
-                    } else if(g_Options.esp_defuse_kit && entity->IsDefuseKit()) {
-                        Visuals::Misc::RenderDefuseKit(entity);
-                    } else if(entity->IsPlantedC4()) {
-                        if(g_Options.esp_planted_c4)
-                            Visuals::Misc::RenderPlantedC4(entity);
                     }
                 }
 
@@ -211,80 +225,14 @@ namespace Hooks
         }
     }
     //--------------------------------------------------------------------------------
-    void __stdcall hkRenderView(const CViewSetup& view, CViewSetup& a3, int a4, int a5)
+    int __stdcall hkDoPostScreenEffects(int a1)
     {
-        static auto ofunc = viewrender_hook.get_original<RenderView>(index::RenderView);
-        
-        if(g_LocalPlayer && g_Options.glow_enabled) {
-            for(auto i = 0; i < g_GlowObjManager->m_GlowObjectDefinitions.Count(); i++) {
-                auto& glowObject = g_GlowObjManager->m_GlowObjectDefinitions[i];
-                auto entity = (C_BaseEntity*)glowObject.m_pEntity;
+        auto oDoPostScreenEffects = clientmode_hook.get_original<DoPostScreenEffects>(index::DoPostScreenSpaceEffects);
 
-                if(glowObject.IsUnused())
-                    continue;
+        if(g_LocalPlayer && g_Options.glow_enabled)
+            Glow::Get().Run();
 
-                if(!entity || entity->IsDormant())
-                    continue;
-
-                auto class_id = entity->GetClientClass()->m_ClassID;
-                auto color = Color{};
-
-                switch(class_id) {
-                case ClassId_CCSPlayer:
-                {
-                    auto is_enemy = entity->m_iTeamNum() != g_LocalPlayer->m_iTeamNum();
-
-                    if(((C_BasePlayer*)entity)->HasC4() && is_enemy && g_Options.glow_c4_carrier) {
-                        color = g_Options.color_glow_c4_carrier;
-                        break;
-                    }
-
-                    if(!g_Options.glow_players || !((C_BasePlayer*)entity)->IsAlive())
-                        continue;
-
-                    if(!is_enemy && g_Options.glow_enemies_only)
-                        continue;
-
-                    color = is_enemy ? g_Options.color_glow_enemy : g_Options.color_glow_ally;
-
-                    break;
-                }
-                case ClassId_CChicken:
-                    if(!g_Options.glow_chickens)
-                        continue;
-                    entity->m_bShouldGlow() = true;
-                    color = g_Options.color_glow_chickens;
-                    break;
-                case ClassId_CBaseAnimating:
-                    if(!g_Options.glow_defuse_kits)
-                        continue;
-                    color = g_Options.color_glow_defuse;
-                    break;
-                case ClassId_CPlantedC4:
-                    if(!g_Options.glow_planted_c4)
-                        continue;
-                    color = g_Options.color_glow_planted_c4;
-                    break;
-                default:
-                {
-                    if(entity->IsWeapon()) {
-                        if(!g_Options.glow_weapons)
-                            continue;
-                        color = g_Options.color_glow_weapons;
-                    }
-                }
-                }
-
-                glowObject.m_flRed   = color.r() / 255.0f;
-                glowObject.m_flGreen = color.g() / 255.0f;
-                glowObject.m_flBlue  = color.b() / 255.0f;
-                glowObject.m_flAlpha = color.a() / 255.0f;
-                glowObject.m_bRenderWhenOccluded   = true;
-                glowObject.m_bRenderWhenUnoccluded = false;
-            }
-        }
-
-        return ofunc(g_ViewRender, view, a3, a4, a5);
+        return oDoPostScreenEffects(g_ClientMode, a1);
     }
     //--------------------------------------------------------------------------------
     void __stdcall hkFrameStageNotify(ClientFrameStage_t stage)
